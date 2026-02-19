@@ -43,6 +43,8 @@ Sistem ini berevolusi dari sekadar pemantauan data pasif menjadi **PIM Controlle
 ├── Makefile                    # Makefile untuk kompilasi dan simulasi manual
 └── README.md                   # Dokumentasi ini
 
+```
+
 ## 🚀 Cara Menjalankan Simulasi
 Cara termudah untuk mengkompilasi, membuat data model, dan menjalankan benchmark adalah menggunakan skrip yang telah disediakan:
 
