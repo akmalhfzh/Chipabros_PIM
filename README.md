@@ -72,3 +72,10 @@ BASE E: The total energy consumed if a standard CPU continually accesses Off-Chi
 PIM E: The actual energy consumed by the PIM system (a combination of physical DRAM access for dense data and lightweight metadata checking/gating for sparse data).
 
 SAVING: The percentage of energy saved thanks to the Controller-Level Zero-Skipping mechanism. Higher sparsity models (like LLaMA) yield greater savings.
+
+
+## 🛠️ Requirements
+Ensure the following tools are installed on your system:
+1. Icarus Verilog (iverilog): For RTL compilation and simulation.
+2. GTKWave (Optional): For viewing simulation waveforms (.vcd).
+3. Python 3: For running the AI data profile generator.
