@@ -59,13 +59,14 @@ Execution Flow:
 ## 📊 Benchmark Output Example
 Upon successful execution, the console will output the Bitlet Model metrics alongside a summary table based on the AI model profiles:
 
-Plaintext
+```text
  MODEL           | BASE E (uJ)     | PIM E (uJ)      | SAVING     
 ======================================================================
  resnet-50       | 198.40          | 138.88          | 30.00 % 
  bert-base       | 198.40          | 79.36           | 60.00 % 
  llama-2         | 198.40          | 29.76           | 85.00 % 
- ideal-case      | 198.40          | 9.92            | 95.00 % 
+ ideal-case      | 198.40          | 9.92            | 95.00 %
+```
 BASE E: The total energy consumed if a standard CPU continually accesses Off-Chip DRAM without any PIM intervention.
 
 PIM E: The actual energy consumed by the PIM system (a combination of physical DRAM access for dense data and lightweight metadata checking/gating for sparse data).
