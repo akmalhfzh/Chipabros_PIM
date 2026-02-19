@@ -1,220 +1,76 @@
-# PIM Memory System - Standalone Version
+# 🧠 Micron PIM System - Sparsity Aware Accelerator (v4)
 
-## 🎯 Overview
+Repositori ini berisi implementasi simulasi RTL (Register Transfer Level) untuk sistem **Processing-In-Memory (PIM)** yang dirancang untuk mengeksploitasi *Coarse-Grained Block Sparsity* pada beban kerja AI/Machine Learning.
 
-Sistem **Processing-in-Memory (PIM)** yang sparsity-aware untuk mengurangi energi fetch pada workload AI/Neural Network. 
-
-**STANDALONE** - Tidak perlu download PicoRV32, LiteDRAM, atau Verilog-AXI!
-
-## ✨ Komponen
-
-- **CPU**: Simplified RISC-V core (built-in)
-- **Memory**: Simple DDR-like model (built-in)
-- **PIM**: Sparsity-aware processing module
-- **Interconnect**: AXI4 adapter
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-```bash
-# Ubuntu/Debian
-sudo apt-get install iverilog gtkwave
-
-# macOS
-brew install icarus-verilog gtkwave
-```
-
-### Running Simulation
-
-```bash
-# Clone/extract project
-cd pim_memory_system
-
-# Run simulation
-make sim
-
-# View waveform
-make view
-```
-
-**Output yang diharapkan:**
-```
-========================================
-PIM Memory System Test
-========================================
-
-[INFO] Running CPU program...
-
-========================================
-RESULTS
-========================================
-Configuration      | Cycles | Sparse | Total | Energy
---------------------------------------------------------
-Baseline (no PIM)  |   5000 |      0 |     0 |     0%
-PIM-enabled        |   5000 |    112 |   160 |    70%
---------------------------------------------------------
-
-✓ PIM successfully detected sparsity!
-  Energy savings: 70%
-
-========================================
-TEST PASSED
-========================================
-```
-
-## 📁 Structure
-
-```
-pim_memory_system/
-├── rtl/
-│   ├── simple_riscv_cpu.v      # Simplified RISC-V CPU
-│   ├── cpu_to_axi.v            # CPU to AXI adapter
-│   ├── pim_sparsity_aware.v    # PIM module (CORE)
-│   ├── simple_memory.v         # Memory model
-│   └── pim_system_top.v        # Top integration
-├── testbench/
-│   └── tb_pim_system.v         # Testbench
-├── Makefile
-└── README.md
-```
-
-## 🔬 How It Works
-
-### Architecture
-
-```
-Baseline Mode (ENABLE_PIM=0):
-CPU → AXI Adapter → Memory
-
-PIM Mode (ENABLE_PIM=1):
-CPU → AXI Adapter → PIM → Memory
-                     ↓
-                Sparsity Detection
-                (70% energy saved!)
-```
-
-### PIM Operation
-
-1. CPU requests data
-2. Request goes through PIM
-3. PIM forwards to memory
-4. Memory returns 512-bit data
-5. PIM detects zero chunks
-6. Statistics updated
-7. Data forwarded to CPU
-
-## 🎓 What's Included
-
-### CPU (simple_riscv_cpu.v)
-- Basic RISC-V instruction set
-- LUI, ADDI, ADD, SUB, LW, SW, JAL
-- Built-in test program
-- Memory loop execution
-
-### PIM (pim_sparsity_aware.v)
-- 32-bit granularity detection
-- Real-time bitmap generation
-- Energy savings calculation
-- AXI4 pass-through
-
-### Memory (simple_memory.v)
-- Pre-initialized with sparse data
-- DDR-like latency (CAS = 10 cycles)
-- 1MB size
-
-## 📊 Expected Results
-
-CPU akan menjalankan program loop yang:
-1. Load data dari memory (sparse ~70%)
-2. Store data kembali
-3. Increment address
-4. Repeat
-
-PIM akan detect:
-- ~70% data adalah zero
-- ~70% energy savings
-- Sama cycle count (minimal overhead)
-
-## 🔧 Configuration
-
-### Enable/Disable PIM
-
-Edit `rtl/pim_system_top.v`:
-```verilog
-pim_system_top #(
-    .ENABLE_PIM(1)  // 1=enable, 0=disable
-) dut (
-    // ...
-);
-```
-
-### Change Sparsity Level
-
-Edit `rtl/simple_memory.v` line ~50:
-```verilog
-if ($random % 10 < 3) begin  // 30% non-zero (70% sparse)
-    // Change to:
-    // < 1  → 10% non-zero (90% sparse)
-    // < 5  → 50% non-zero (50% sparse)
-    // < 9  → 90% non-zero (10% sparse)
-```
-
-## 🐛 Troubleshooting
-
-**Error: "command not found: iverilog"**
-```bash
-sudo apt-get install iverilog
-```
-
-**Simulation hangs**
-- Check timeout (default 1ms)
-- Verify clock generation
-- Check reset timing
-
-**No sparsity detected**
-- Memory initialized correctly?
-- PIM enabled?
-- CPU actually accessing memory?
-
-## 📖 Learn More
-
-1. **rtl/pim_sparsity_aware.v** - Understand sparsity detection
-2. **rtl/simple_riscv_cpu.v** - See CPU implementation
-3. **testbench/tb_pim_system.v** - Learn testing methodology
-
-## 🎯 Next Steps
-
-1. ✅ Run simulation successfully
-2. ✅ Understand results
-3. 📝 Modify sparsity level
-4. 📝 Change CPU program
-5. 📝 Add more statistics
-6. 🚀 Integrate real PicoRV32 (optional)
-7. 🚀 Add compression (optional)
-
-## 💡 Educational Value
-
-Sistem ini demonstrate:
-- ✅ Basic CPU operation
-- ✅ Memory controller design
-- ✅ AXI4 protocol
-- ✅ Processing-in-Memory concept
-- ✅ Energy-efficient computing
-- ✅ Sparse data handling
-
-Perfect untuk:
-- Computer architecture students
-- Hardware design learners
-- PIM researchers
-- AI acceleration enthusiasts
-
-## 📄 License
-
-Standalone implementation - free to use and modify.
-
-No external dependencies means no license conflicts!
+Sistem ini berevolusi dari sekadar pemantauan data pasif menjadi **PIM Controller Aktif** yang mampu melakukan **Controller-Level Zero-Skipping**, mencegah akses ke DRAM secara fisik untuk menghemat energi secara masif.
 
 ---
 
-**Made with ❤️ for learning and research**
+## ✨ Fitur Utama (Update v4)
+
+1. **Controller-Level Address Gating (Check-then-Read)**
+   Sistem PIM mencegat permintaan baca (Read Request) dari CPU di level bus AXI. PIM mengecek tabel metadata internal (*lookahead*); jika blok berukuran 512-bit terdeteksi sebagai sekumpulan nilai nol (*sparse*), permintaan ke DRAM (`ARVALID`) akan **diblokir total**. Ini menghemat energi dari perintah ACT (Activate) dan RD (Read) pada fisik DRAM.
+
+2. **Local Zero Injection (Fake Ready)**
+   Untuk blok data yang *sparse*, PIM tidak membiarkan CPU menunggu. PIM akan secara instan merespons CPU dengan sinyal Ready dan memberikan data balasan berisi nol murni. Ini secara dramatis memotong *latency* akses memori.
+
+3. **Coarse-Grained Block Sparsity (512-bit)**
+   Metode *sparsity* dioptimalkan untuk fisika DRAM (*burst length* 64 Byte). 1 bit metadata mengontrol nasib 16 *words* (512-bit) sekaligus, menghasilkan *overhead* metadata yang sangat kecil (<0.2%).
+
+4. **Analytical Bitlet Energy Model**
+   Terintegrasi dengan monitor performa berbasis *Bitlet Model* (Horowitz 2014 & Newton 2020) yang berjalan berdampingan dengan simulasi RTL untuk menghitung estimasi suhu dan konsumsi energi secara akurat (*Active vs Idle Energy*).
+
+5. **Model-Aware Profiling**
+   Generator *testcase* mensimulasikan karakteristik *Structured Block Pruning* dari model AI nyata seperti **ResNet-50**, **BERT-Base**, dan **LLaMA-2**, memberikan pengujian arsitektur yang valid secara akademis.
+
+---
+
+## 📂 Struktur Direktori
+
+```text
+.
+├── rtl/                        # Kode sumber Verilog untuk perangkat keras
+│   ├── simple_riscv_cpu.v      # Host CPU (Mandor) yang mengirimkan trigger LW
+│   ├── simple_memory.v         # Model DRAM (Bekerja di belakang PIM)
+│   ├── cpu_to_axi.v            # Adapter memori CPU ke antarmuka AXI4
+│   ├── pim_sparsity_aware.v    # 🌟 INTI PIM: Controller dengan fitur Address Gating & Fake Ready
+│   ├── pim_perf_monitor.v      # 🌟 Modul kalkulasi energi Bitlet Model & RC Thermal
+│   └── pim_system_top.v        # Modul Top-Level yang menyatukan seluruh sistem
+├── testbench/                  # Kode untuk pengujian
+│   └── tb_pim_system.v         # Testbench utama penghasil clock & backdoor metadata loader
+├── gen_testcase.py             # Script Python untuk generate Model-Aware firmware (.hex)
+├── run_all.sh                  # Script Bash untuk eksekusi otomatis 1-klik
+├── Makefile                    # Makefile untuk kompilasi dan simulasi manual
+└── README.md                   # Dokumentasi ini
+
+## 🚀 Cara Menjalankan Simulasi
+Cara termudah untuk mengkompilasi, membuat data model, dan menjalankan benchmark adalah menggunakan skrip yang telah disediakan:
+
+Bash
+chmod +x run_all.sh
+./run_all.sh
+Alur yang terjadi saat script dijalankan:
+
+iverilog mengkompilasi seluruh file rtl/ dan testbench/.
+
+gen_testcase.py menghasilkan profil data (firmware) yang mensimulasikan distribusi Gaussian bobot dari model ResNet, BERT, dan LLaMA, lalu menerapkan magnitude-based block pruning.
+
+Testbench mengeksekusi firmware tersebut di dalam arsitektur bersiklus-akurat (cycle-accurate).
+
+pim_perf_monitor.v menangkap statistik siklus (Active vs Idle) dan mencetak metrik energi ke konsol.
+
+## 📊 Contoh Output Benchmark
+Setelah menjalankan skrip, Anda akan melihat laporan metrik Bitlet Model beserta tabel rangkuman energi berdasarkan profil model AI:
+
+Plaintext
+ MODEL           | BASE E (uJ)     | PIM E (uJ)      | SAVING     
+======================================================================
+ resnet-50       | 198.40          | 138.88          | 30.00 % 
+ bert-base       | 198.40          | 79.36           | 60.00 % 
+ llama-2         | 198.40          | 29.76           | 85.00 % 
+ ideal-case      | 198.40          | 9.92            | 95.00 % 
+BASE E: Energi yang dihabiskan jika CPU standar mengakses Off-Chip DRAM terus-menerus tanpa ada fitur PIM.
+
+PIM E: Energi aktual yang dikonsumsi oleh PIM (kombinasi dari akses DRAM untuk data dense dan komputasi/pengecekan metadata untuk data sparse).
+
+SAVING: Persentase energi yang berhasil diselamatkan berkat fitur Controller-Level Zero-Skipping. Semakin sparse modelnya (seperti LLaMA), semakin tinggi penghematannya.
