@@ -1,9 +1,0 @@
-testbench/tb_pim_system.v:56: warning: Static variable initialization requires explicit lifetime in this context.
-testbench/tb_pim_system.v:58: warning: Static variable initialization requires explicit lifetime in this context.
-testbench/tb_pim_system.v:59: warning: Static variable initialization requires explicit lifetime in this context.
-testbench/tb_pim_system.v:22: error: port ``skipped_ops'' is not a port of dut_pim.
-testbench/tb_pim_system.v:22: error: port ``energy_saved'' is not a port of dut_pim.
-rtl/pim_system_top.v:31: error: port ``active_cycles'' is not a port of pim_inst.
-rtl/pim_system_top.v:31: error: port ``idle_cycles'' is not a port of pim_inst.
-rtl/pim_system_top.v:33: warning: input port s_axi_bready is coerced to inout.
-4 error(s) during elaboration.
