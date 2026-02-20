@@ -1,8 +1,7 @@
 `timescale 1ps/1ps
 
 module pim_system_top (
-
-
+    input  wire        clk,
     input  wire        rst_n,
 
     input  wire        req_valid,
@@ -26,9 +25,21 @@ module pim_system_top (
     wire [2:0]  ba;
     wire [13:0] addr;
 
-    // DDR clock differential
-    wire ck;
-    wire ck_n;
+    // DDR differential clock
+    wire ck   = clk;
+    wire ck_n = ~clk;
+
+    // DDR data bus (tri-stated for now; we are not capturing DQ yet)
+    wire [7:0] dq;
+    wire [0:0] dqs;
+    wire [0:0] dqs_n;
+    wire [0:0] dm_tdqs;
+    wire [0:0] tdqs_n;
+
+    assign dq      = 8'hzz;
+    assign dqs     = 1'bz;
+    assign dqs_n   = 1'bz;
+    assign dm_tdqs = 1'bz;
 
     // -----------------------------
     // PIM wires
@@ -36,9 +47,6 @@ module pim_system_top (
     wire pim_start;
     wire pim_done;
     wire [63:0] pim_result;
-
-    assign ck   = clk;
-    assign ck_n = ~clk;
 
     // -----------------------------
     // Controller
@@ -75,7 +83,7 @@ module pim_system_top (
     );
 
     // -----------------------------
-    // PIM MAC engine
+    // PIM MAC engine (near-memory compute)
     // -----------------------------
     pim_mac_engine u_pim (
         .clk(clk),
@@ -90,16 +98,23 @@ module pim_system_top (
     // Micron DDR3 blackbox
     // -----------------------------
     ddr3_blackbox u_mem (
-    .ck   (ck),
-    .ck_n (ck_n),
-    .cke  (cke),
-    .cs_n (cs_n),
-    .ras_n(ras_n),
-    .cas_n(cas_n),
-    .we_n (we_n),
-    .ba   (ba),
-    .addr (addr),
-    .odt  (odt)
+        .rst_n(rst_n),
+        .ck(ck),
+        .ck_n(ck_n),
+        .cke(cke),
+        .cs_n(cs_n),
+        .ras_n(ras_n),
+        .cas_n(cas_n),
+        .we_n(we_n),
+        .ba(ba),
+        .addr(addr),
+        .odt(odt),
+
+        .dm_tdqs(dm_tdqs),
+        .dq(dq),
+        .dqs(dqs),
+        .dqs_n(dqs_n),
+        .tdqs_n(tdqs_n)
     );
 
 endmodule
