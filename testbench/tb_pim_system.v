@@ -1,73 +1,66 @@
-`timescale 1ns/1ps
-
+`timescale 1ps/1ps
 module tb_pim_system;
-    // --- SIMULATION CONFIG ---
-    parameter CLK_PERIOD  = 10;        // 10ns = 100MHz
-    parameter SIM_DURATION = 20000000; // 20ms >> 3000 iter x 40cyc x 10ns = 1.2ms
+    localparam integer NUM_OPERATIONS = 3000;
+    localparam [31:0] ADDR_INPUTS = 32'h0004_0000;
+    localparam integer STRIDE_BYTES = 64;
 
-    reg clk, rst_n;
+    reg clk = 0; always #1250 clk = ~clk; reg rst_n = 0;
+    reg req_valid; wire req_ready; reg [31:0] req_addr; wire resp_valid; reg resp_ready; wire [511:0] resp_data;
+    wire [31:0] act, rd, pre, skip, pim_ops, pim_cycles;
 
-    wire [31:0] total_ops;
-    wire [31:0] active_cyc;
-    wire [31:0] idle_cyc;
-
-    // --- 1. DUT ---
-    pim_system_top #(
-        .ENABLE_PIM(1),
-        .DATA_WIDTH(512),
-        .ADDR_WIDTH(32)
-    ) dut (
-        .clk(clk), .rst_n(rst_n),
-        .mac_ops_count(total_ops),
-        .active_cycles(active_cyc),
-        .idle_cycles(idle_cyc)
+    pim_system_top dut (
+        .clk(clk), .rst_n(rst_n), .req_valid(req_valid), .req_ready(req_ready), .req_addr(req_addr),
+        .resp_valid(resp_valid), .resp_ready(resp_ready), .resp_data(resp_data),
+        .act_count(act), .rd_count(rd), .pre_count(pre), .skip_count(skip), .pim_ops_count(pim_ops), .pim_cycle_count(pim_cycles)
     );
 
-    // --- 2. PERFORMANCE MONITOR ---
-    pim_perf_monitor perf_mon (
-        .clk(clk), .rst_n(rst_n),
-        .active_cycles_in(active_cyc),
-        .idle_cycles_in(idle_cyc),
-        .total_ops_in(total_ops)
-    );
+    real E_ACT=30.0, E_RD=20.0, E_PRE=15.0, E_MAC_PER_CYCLE=2.0;
+    real base_energy, dram_energy, pim_compute_energy, pim_total_energy, saving;
+    integer k, base_act, base_rd, base_pre, base_pim_cycles, sent, received;
+    reg base_bank_open [0:7]; reg [12:0] base_open_row [0:7];
 
-    // --- 3. CLOCK ---
-    initial clk = 0;
-    always #(CLK_PERIOD/2) clk = ~clk;
+    function [2:0] f_bank(input [31:0] a); begin f_bank = a[12:10]; end endfunction
+    function [12:0] f_row(input [31:0] a); begin f_row = a[25:13]; end endfunction
 
-    // --- 4. METADATA LOADER ---
-    // KRITIS: Load SETELAH rst_n=1!
-    // Kalau di-load saat rst_n=0, synchronous reset di pim_sparsity_aware
-    // akan overwrite metadata_table ke all-1s di setiap clock edge.
-    reg [31:0] temp_mem [0:262143]; // 1MB = 262144 words (matching firmware.hex)
-    integer m_idx;
-
-    // --- 5. MAIN SIMULATION FLOW ---
-    // TIDAK ADA $finish lain selain di sini. Semua debug monitor
-    // dari versi sebelumnya harus dihapus untuk mencegah early termination.
-    initial begin
-        $dumpfile("pim_system.vcd");
-        $dumpvars(0, tb_pim_system);
-
-        // Reset sequence
-        rst_n = 0;
-        #(CLK_PERIOD * 10);
-        rst_n = 1;
-
-        // Load metadata tepat setelah reset
-        #(CLK_PERIOD * 2);
-        $readmemh("firmware.hex", temp_mem);
-        for (m_idx = 0; m_idx < 128; m_idx = m_idx + 1) begin
-            dut.gen_pim.pim_inst.metadata_table[(m_idx*32) +: 32] = temp_mem[65536 + m_idx];
+    task baseline_model_step(input [31:0] a);
+        reg [2:0] b; reg [12:0] r;
+        begin
+            b = f_bank(a); r = f_row(a);
+            if (base_bank_open[b] && base_open_row[b] == r) base_rd = base_rd + 1;
+            else if (base_bank_open[b]) begin base_pre = base_pre+1; base_act = base_act+1; base_rd = base_rd+1; end
+            else begin base_act = base_act+1; base_rd = base_rd+1; end
+            base_open_row[b] = r; base_bank_open[b] = 1; base_pim_cycles = base_pim_cycles + 16;
         end
-        $display("[TB] Metadata loaded post-reset. Word[0]=%h", temp_mem[65536]);
+    endtask
 
-        // Tunggu seluruh simulasi
-        #(SIM_DURATION);
+    initial begin
+        req_valid = 0; req_addr = 0; resp_ready = 1;
+        for (k=0; k<8; k=k+1) begin base_bank_open[k] = 0; base_open_row[k] = 0; end
+        base_act = 0; base_rd = 0; base_pre = 0; base_pim_cycles = 0;
+        rst_n = 0; #10000; rst_n = 1; sent = 0; received = 0;
 
-        // Report — HARUS dipanggil sebelum $finish
-        perf_mon.report_metrics();
+        while (sent < NUM_OPERATIONS) begin
+            @(posedge clk);
+            if (!req_valid && req_ready) begin
+                req_addr <= ADDR_INPUTS + sent*STRIDE_BYTES; req_valid <= 1;
+            end
+            if (req_valid && req_ready) begin baseline_model_step(req_addr); req_valid <= 0; sent <= sent + 1; end
+            if (resp_valid && resp_ready) received <= received + 1;
+        end
+        while (received < NUM_OPERATIONS) begin
+            @(posedge clk); if (resp_valid && resp_ready) received <= received + 1;
+        end
+
+        base_energy = (base_act*E_ACT) + (base_rd*E_RD) + (base_pre*E_PRE) + (base_pim_cycles*E_MAC_PER_CYCLE);
+        dram_energy = (act*E_ACT) + (rd*E_RD) + (pre*E_PRE);
+        pim_compute_energy = (pim_cycles*E_MAC_PER_CYCLE);
+        pim_total_energy = dram_energy + pim_compute_energy;
+        if (base_energy > 0.0) saving = ((base_energy - pim_total_energy) / base_energy) * 100.0; else saving = 0.0;
+        
+        $display("BASE_CMDS,ACT=%0d,RD=%0d,PRE=%0d,PIM_CYC=%0d", base_act, base_rd, base_pre, base_pim_cycles);
+        $display("DUT_CMDS,ACT=%0d,RD=%0d,PRE=%0d,SKIP=%0d,PIM_CYC=%0d", act, rd, pre, skip, pim_cycles);
+        
+        $display("RESULT,%0d,%0d,%0.2f,%0.2f,%0.2f%%", NUM_OPERATIONS, skip, base_energy, pim_total_energy, saving);
         $finish;
     end
-
 endmodule
