@@ -45,7 +45,5 @@ view:
 
 clean:
 	rm -rf $(SIM_DIR)
-	rm -rf $(SIM_CASES)
 	rm -f *.vcd *.vvp
 	@echo "Cleaned!"
-
