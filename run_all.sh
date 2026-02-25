@@ -1,65 +1,77 @@
 #!/bin/bash
-
-# ==============================================================================
-# 🛠️ MICRON PIM SYSTEM - FINAL REPORT
-# ==============================================================================
-
-SIM_DIR="sim"
-LOG_DIR="logs"
+SIM_DIR="sim_v7"
+LOG_DIR="logs_v7"
 OUTPUT_VVP="tb.vvp"
+MICRON_DIR="micron_ddr3"
+CSV_FILE="results_sweep_precise.csv"
 
-mkdir -p $SIM_DIR
-mkdir -p $LOG_DIR
+mkdir -p "$SIM_DIR" "$LOG_DIR"
 
-# 1. CLEANUP (Hapus file backup yang bikin error)
-rm -f rtl/simple_memory_backup.v 2>/dev/null
+echo "🔨 [1/2] Compiling Verilog (TLM Model)..."
+iverilog -g2012 -o "$SIM_DIR/$OUTPUT_VVP" \
+  -I rtl_v7 -I "$MICRON_DIR" -Dden1024Mb -Dx8 -Dsg125 \
+  rtl_v7/ddr3_blackbox.v rtl_v7/dram_controller_ddr3.v \
+  rtl_v7/pim_system_top.v rtl_v7/pim_mac_engine.v \
+  "$MICRON_DIR/ddr3.v" tb_v7/tb_pim_system.v
 
-# 2. COMPILE (Explicit File List)
-echo "🔨 [1/3] Compiling Verilog..."
-iverilog -g2012 -o $SIM_DIR/$OUTPUT_VVP \
-    -I rtl \
-    rtl/simple_riscv_cpu.v \
-    rtl/simple_memory.v \
-    rtl/cpu_to_axi.v \
-    rtl/pim_sparsity_aware.v \
-    rtl/pim_system_top.v \
-    rtl/pim_perf_monitor.v \
-    testbench/tb_pim_system.v
+if [ $? -ne 0 ]; then exit 1; fi
 
-if [ $? -ne 0 ]; then
-    echo "❌ Compile Failed!"; exit 1;
-fi
+echo "🚀 [2/2] Running Precision Sweep for AI Models (Row-Hit Aware)..."
+echo " MODEL      | SPARSITY | BASE E(uJ) | Proposed Concept E(uJ) | SAVING | REAL ACT | REAL RD | SKIP "
+echo "====================================================================================================="
 
-# 3. GENERATE DATA
-echo "🎲 [2/3] Generating Data..."
-python3 gen_testcase.py
+# Siapkan Header CSV yang baru
+echo "Model,Sparsity_Pct,Base_Energy_uJ,PIM_Energy_uJ,Saving_Pct,Base_ACT,Base_RD,PIM_ACT,PIM_RD,PIM_SKIP" > "$CSV_FILE"
 
-# 4. RUN SIMULATION
-echo "🚀 [3/3] Running Sparsity Sweep..."
-echo ""
-# Header Tabel Sesuai Request
-printf " %-10s | %-15s | %-15s | %-10s | %-12s | %-12s\n" "SPARSITY" "BASE E (uJ)" "PIM E (uJ)" "SAVING" "SPARSE PKTS" "TOTAL PKTS"
-echo "==================================================================================================="
-
-for s in 0 25 50 75 85 90 95
-do
-    cp sim_cases/firmware_sparse_$s.hex $SIM_DIR/firmware.hex
-    cd $SIM_DIR; vvp $OUTPUT_VVP > ../$LOG_DIR/log_sparse_$s.txt; cd ..
+# Looping sesuai dengan file yang lu punya di folder sim_cases
+for MODEL in ResNet_50 BERT_NLP LLaMA3_8B GPT4_Sim; do
+  for S in 0 25 50 75 85 90 95; do
+    TRACE_FILE="sim_cases/meta_${MODEL}_${S}.hex"
     
-    # Parse CSV Output dari Testbench
-    # Format: RESULT,Total,Sparse,BaseEnergy,PIMEnergy,Saving
-    LINE=$(grep "RESULT," $LOG_DIR/log_sparse_$s.txt)
-    
-    if [ ! -z "$LINE" ]; then
-        TOTAL=$(echo $LINE | cut -d',' -f2)
-        SPARSE=$(echo $LINE | cut -d',' -f3)
-        BASE_E=$(echo $LINE | cut -d',' -f4)
-        PIM_E=$(echo $LINE | cut -d',' -f5)
-        SAVE=$(echo $LINE | cut -d',' -f6)
-        
-        printf " %-10s | %-15s | %-15s | %-10s | %-12s | %-12s\n" "$s%" "$BASE_E" "$PIM_E" "$SAVE" "$SPARSE" "$TOTAL"
-    else
-        printf " %-10s | %-15s | %-15s | %-10s | %-12s | %-12s\n" "$s%" "ERR" "ERR" "ERR" "ERR" "ERR"
+    if [ ! -f "$TRACE_FILE" ]; then
+      printf " %-10s | %-8s | FILE MISSING! \n" "$MODEL" "${S}%"
+      continue
     fi
+
+    cp "$TRACE_FILE" "$SIM_DIR/meta.hex"
+    cd "$SIM_DIR"
+    vvp "$OUTPUT_VVP" > "../$LOG_DIR/log_${MODEL}_${S}.txt"
+    cd ..
+    
+    # INI YANG DIBENERIN: Hapus "../" karena kita udah ada di root directory
+    LOG="$LOG_DIR/log_${MODEL}_${S}.txt"
+    
+    # Ekstraksi Presisi dari Verilog
+    BASE_LINE=$(grep "^BASE_CMDS," "$LOG")
+    DUT_LINE=$(grep "^DUT_CMDS," "$LOG")
+    RES_LINE=$(grep "^RESULT," "$LOG")
+    
+    if [ -n "$BASE_LINE" ] && [ -n "$DUT_LINE" ]; then
+      B_ACT=$(echo "$BASE_LINE" | grep -o "ACT=[0-9]*" | cut -d= -f2)
+      B_RD=$(echo "$BASE_LINE" | grep -o "RD=[0-9]*" | cut -d= -f2)
+      B_PIM_CYC=$(echo "$BASE_LINE" | grep -o "PIM_CYC=[0-9]*" | cut -d= -f2)
+      
+      D_ACT=$(echo "$DUT_LINE" | grep -o "ACT=[0-9]*" | cut -d= -f2)
+      D_RD=$(echo "$DUT_LINE" | grep -o "RD=[0-9]*" | cut -d= -f2)
+      D_SKIP=$(echo "$DUT_LINE" | grep -o "SKIP=[0-9]*" | cut -d= -f2)
+      D_PIM_CYC=$(echo "$DUT_LINE" | grep -o "PIM_CYC=[0-9]*" | cut -d= -f2)
+      
+      TOTAL=$(echo "$RES_LINE" | cut -d, -f2)
+      
+      # Lempar ke Evaluator Python yang butuh 8 argumen
+      POWER_DATA=$(python3 evaluate_power.py "$TOTAL" "$B_ACT" "$B_RD" "$B_PIM_CYC" "$D_ACT" "$D_RD" "$D_SKIP" "$D_PIM_CYC")
+      
+      BASE_E=$(echo "$POWER_DATA" | cut -d"," -f1)
+      PIM_E=$(echo "$POWER_DATA" | cut -d"," -f2)
+      SAVE=$(echo "$POWER_DATA" | cut -d"," -f3)
+      
+      printf " %-10s | %-8s | %-10s | %-20s | %-6s | %-8s | %-7s | %-5s\n" "$MODEL" "${S}%" "$BASE_E" "$PIM_E" "${SAVE}%" "$D_ACT" "$D_RD" "$D_SKIP"
+      
+      echo "${MODEL},${S},${BASE_E},${PIM_E},${SAVE},${B_ACT},${B_RD},${D_ACT},${D_RD},${D_SKIP}" >> "$CSV_FILE"
+    else
+      printf " %-10s | %-8s | ERR        | ERR       | ERR    | ERR      | ERR     | ERR\n" "$MODEL" "${S}%"
+    fi
+  done
+  echo "---------------------------------------------------------------------------------------"
 done
-echo "==================================================================================================="
+echo "✅ Data presisi (Row-Hit Aware) disimpan di: $CSV_FILE"
