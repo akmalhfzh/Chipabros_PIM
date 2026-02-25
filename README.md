@@ -1,81 +1,65 @@
-# 🧠 Micron PIM System - Sparsity Aware Accelerator (v4)
+# 🧠 Hybrid Trace-Driven PIM Co-Simulation Framework
 
-This repository contains the RTL (Register Transfer Level) simulation implementation for a **Processing-In-Memory (PIM)** system designed to exploit *Coarse-Grained Block Sparsity* in AI/Machine Learning workloads.
+![Simulation Status](https://img.shields.io/badge/Simulation-Cycle_Accurate-success)
+![Power Model](https://img.shields.io/badge/Power_Model-Micron_DDR3-blue)
+![Architecture](https://img.shields.io/badge/Architecture-Processing_In_Memory-orange)
 
-The system has evolved from passive data monitoring into an **Active PIM Controller** capable of **Controller-Level Zero-Skipping**, physically preventing DRAM access to achieve massive energy savings.
-
----
-
-## ✨ Key Features (v4 Update)
-
-1. **Controller-Level Address Gating (Check-then-Read)**
-   The PIM system intercepts read requests from the host CPU at the AXI bus level. It checks an internal metadata table (*lookahead*); if a 512-bit block is detected as a sequence of zeros (*sparse*), the DRAM request (`ARVALID`) is **completely blocked**. This effectively saves the energy typically consumed by physical DRAM ACT (Activate) and RD (Read) commands.
-2. **Local Zero Injection (Fake Ready)**
-   For sparse data blocks, the PIM controller does not keep the CPU waiting. It instantly responds to the CPU with a Ready signal and returns a zero-filled payload. This drastically reduces memory access latency.
-3. **Coarse-Grained Block Sparsity (512-bit)**
-   The sparsity method is optimized for DRAM physics (specifically, a 64-Byte burst length). A single metadata bit dictates the fate of 16 consecutive words (512 bits), resulting in extremely low metadata overhead (<0.2%).
-4. **Analytical Bitlet Energy Model**
-   The architecture is integrated with a *Bitlet Model*-based performance monitor (referencing Horowitz 2014 & Newton 2020 data). It runs alongside the cycle-accurate RTL simulation to compute precise energy consumption metrics (*Active vs. Idle Energy*) and estimate thermal behavior.
-5. **Model-Aware Profiling**
-   The synthetic testcase generator emulates the *Structured Block Pruning* characteristics of real-world AI models such as **ResNet-50**, **BERT-Base**, and **LLaMA-2**, ensuring the architectural evaluation is academically rigorous and valid.
-
----
-
-## 📂 Directory Structure
-
-```text
-.
-├── rtl/                        # Hardware Verilog source code
-│   ├── simple_riscv_cpu.v      # Host CPU that issues memory-mapped LW triggers
-│   ├── simple_memory.v         # Behavioral DRAM model
-│   ├── cpu_to_axi.v            # CPU memory interface to AXI4 adapter
-│   ├── pim_sparsity_aware.v    # 🌟 CORE PIM: Controller with Address Gating & Fake Ready
-│   ├── pim_perf_monitor.v      # 🌟 Bitlet Model & RC Thermal energy calculator
-│   └── pim_system_top.v        # Top-Level module integrating the entire system
-├── testbench/                  # Verification and simulation files
-│   └── tb_pim_system.v         # Main testbench (clock generator & metadata backdoor loader)
-├── gen_testcase.py             # Python script to generate Model-Aware firmware (.hex)
-├── run_all.sh                  # Bash script for 1-click automated execution
-├── Makefile                    # Makefile for manual compilation and simulation
-└── README.md                   # This documentation
-```
-
-## 🚀 How to Run the Simulation
-The easiest way to compile the RTL, generate the AI model data profiles, and run the benchmarks is by using the provided bash script:
-
-```text
-Bash
-chmod +x run_all.sh
-./run_all.sh
-```
-
-Execution Flow:
-1. iverilog compiles all source files in the rtl/ and testbench/ directories.
-2. gen_testcase.py generates data profiles (firmware) simulating the Gaussian weight distributions of ResNet, BERT, and LLaMA, subsequently applying magnitude-based block pruning.
-3. The testbench executes the generated firmware within the cycle-accurate RTL architecture.
-4. pim_perf_monitor.v captures cycle statistics (Active vs. Idle) and prints the calculated energy metrics to the console.
+An industry-grade, hybrid trace-driven co-simulation framework for evaluating **Processing-In-Memory (PIM)** architectures against conventional Von Neumann architectures (CPU/GPU + DRAM). This framework accurately measures energy consumption by combining real-world AI workload extraction, cycle-accurate RTL simulation, and discrete event-based analytical power modeling.
 
 
-## 📊 Benchmark Output Example
-Upon successful execution, the console will output the Bitlet Model metrics alongside a summary table based on the AI model profiles:
 
-```text
- MODEL           | BASE E (uJ)     | PIM E (uJ)      | SAVING     
-======================================================================
- resnet-50       | 198.40          | 138.88          | 30.00 % 
- bert-base       | 198.40          | 79.36           | 60.00 % 
- llama-2         | 198.40          | 29.76           | 85.00 % 
- ideal-case      | 198.40          | 9.92            | 95.00 %
-```
-BASE E: The total energy consumed if a standard CPU continually accesses Off-Chip DRAM without any PIM intervention.
+## ✨ Key Features
 
-PIM E: The actual energy consumed by the PIM system (a combination of physical DRAM access for dense data and lightweight metadata checking/gating for sparse data).
+1. **Real-World AI Workloads**: Extracts memory traces from state-of-the-art Neural Networks (`ResNet-50`, `BERT_NLP`, `LLaMA3_8B`, `GPT4_Sim`) using magnitude pruning while preserving spatial locality.
+2. **Row-Hit Aware RTL Simulation**: The Verilog testbench doesn't just guess memory accesses. It maintains a "Shadow Model" to track exact physical Row Activations (ACT) and Column Reads (RD) dynamically based on row-hit/miss probability.
+3. **Zero-Value Skipping**: The PIM Engine actively skips memory fetching for zero-value data, drastically reducing memory bandwidth and energy.
+4. **Micron Analytical Power Model**: Energy is calculated using an object-oriented Python power model reverse-engineered from the official **Micron DDR3 Power Calculator (Rev 1.02)**.
+5. **Fair Compute Penalties**: Includes a conservative 2.0 pJ/MAC penalty for in-memory logic computation, grounded in standard CMOS literature (Horowitz, ISSCC 2014).
 
-SAVING: The percentage of energy saved thanks to the Controller-Level Zero-Skipping mechanism. Higher sparsity models (like LLaMA) yield greater savings.
+## 📂 Repository Structure
 
+* `run_all.sh` / `run_all.bat` : Master orchestrator script.
+* `gen_real_trace.py` : Generates AI memory traces (0% - 95% sparsity).
+* `tb_pim_system.v` : Cycle-accurate Verilog Testbench (generates `BASE_CMDS` & `DUT_CMDS`).
+* `pim_system_top.v` : Top-level RTL for the Processing-In-Memory engine.
+* `dram_controller_ddr3.v` : TLM DRAM Controller.
+* `evaluate_power.py` : Calculates absolute energy ($\mu J$) based on precise physical counters.
+* `ddr3_power_calc.py` : Physics database containing Micron's exact IDD current values and timing parameters.
 
-## 🛠️ Requirements
-Ensure the following tools are installed on your system:
-1. Icarus Verilog (iverilog): For RTL compilation and simulation.
-2. GTKWave (Optional): For viewing simulation waveforms (.vcd).
-3. Python 3: For running the AI data profile generator.
+## 🛠️ Prerequisites
+
+To run this simulation framework, ensure you have the following installed:
+* **Icarus Verilog (`iverilog` & `vvp`)**: For TLM RTL Simulation.
+* **Python 3.8+**: For trace generation and analytical power calculation.
+* **Python Libraries**: `numpy`
+
+## 🚀 How to Run
+
+1. Clone this repository and navigate to the project directory:
+   ```bash
+   cd cpu_memory_v9
+   ```
+2. Make the orchestrator script executable (Linux/macOS):
+   ```bash
+   chmod +x run_all.sh
+   ```
+4. Execute the full simulation pipeline:
+   ```bash
+   ./run_all.sh
+   ```
+
+## 📊 Outputs
+The script will sweep through various AI models and sparsity levels, extracting exact hardware counters and calculating energy. 
+The results are automatically appended to: results_sweep_precise.csv
+
+## 🔬 Simulation Pipeline Methodology
+Our hybrid co-simulation runs in 4 distinct phases:
+
+Software Domain: gen_real_trace.py creates HEX files acting as instruction memory traces based on the specific distribution curves of modern AI architectures.
+
+Hardware Domain: Icarus Verilog simulates the transaction layer, evaluating both a standard CPU memory access pattern (Baseline) and the PIM architecture (DUT) cycle-by-cycle.
+
+Physics Domain: Python scripts query the Verilog log for exact ACT, PRE, RD, and SKIP counters.
+
+Energy Domain: evaluate_power.py applies Micron's VDD and IDD parameters to the counters, producing an undeniable, hardware-backed energy consumption report.
+EOF
