@@ -1,6 +1,6 @@
 #!/bin/bash
-SIM_DIR="sim_v7"
-LOG_DIR="logs_v7"
+SIM_DIR="sim"
+LOG_DIR="logs"
 OUTPUT_VVP="tb.vvp"
 MICRON_DIR="micron_ddr3"
 CSV_FILE="results_sweep_precise.csv"
@@ -9,10 +9,10 @@ mkdir -p "$SIM_DIR" "$LOG_DIR"
 
 echo "🔨 [1/2] Compiling Verilog (TLM Model)..."
 iverilog -g2012 -o "$SIM_DIR/$OUTPUT_VVP" \
-  -I rtl_v7 -I "$MICRON_DIR" -Dden1024Mb -Dx8 -Dsg125 \
-  rtl_v7/ddr3_blackbox.v rtl_v7/dram_controller_ddr3.v \
-  rtl_v7/pim_system_top.v rtl_v7/pim_mac_engine.v \
-  "$MICRON_DIR/ddr3.v" tb_v7/tb_pim_system.v
+  -I rtl -I "$MICRON_DIR" -Dden1024Mb -Dx8 -Dsg125 \
+  rtl/ddr3_blackbox.v rtl/dram_controller_ddr3.v \
+  rtl/pim_system_top.v rtl/pim_mac_engine.v \
+  "$MICRON_DIR/ddr3.v" testbench/tb_pim_system.v
 
 if [ $? -ne 0 ]; then exit 1; fi
 
