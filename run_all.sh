@@ -20,10 +20,8 @@ echo "🚀 [2/2] Running Precision Sweep for AI Models (Row-Hit Aware)..."
 echo " MODEL      | SPARSITY | BASE E(uJ) | Proposed Concept E(uJ) | SAVING | REAL ACT | REAL RD | SKIP "
 echo "====================================================================================================="
 
-# Siapkan Header CSV yang baru
 echo "Model,Sparsity_Pct,Base_Energy_uJ,PIM_Energy_uJ,Saving_Pct,Base_ACT,Base_RD,PIM_ACT,PIM_RD,PIM_SKIP" > "$CSV_FILE"
 
-# Looping sesuai dengan file yang lu punya di folder sim_cases
 for MODEL in ResNet_50 BERT_NLP LLaMA3_8B GPT4_Sim; do
   for S in 0 25 50 75 85 90 95; do
     TRACE_FILE="sim_cases/meta_${MODEL}_${S}.hex"
@@ -38,10 +36,9 @@ for MODEL in ResNet_50 BERT_NLP LLaMA3_8B GPT4_Sim; do
     vvp "$OUTPUT_VVP" > "../$LOG_DIR/log_${MODEL}_${S}.txt"
     cd ..
     
-    # INI YANG DIBENERIN: Hapus "../" karena kita udah ada di root directory
     LOG="$LOG_DIR/log_${MODEL}_${S}.txt"
     
-    # Ekstraksi Presisi dari Verilog
+    # Ekstraksi presisi dari Verilog
     BASE_LINE=$(grep "^BASE_CMDS," "$LOG")
     DUT_LINE=$(grep "^DUT_CMDS," "$LOG")
     RES_LINE=$(grep "^RESULT," "$LOG")
